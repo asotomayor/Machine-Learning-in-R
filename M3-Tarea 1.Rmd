@@ -2,9 +2,7 @@
 title: "M3-Tarea 1"
 author: "Antonio Sotomayor"
 date: "25 de noviembre de 2017"
-output:
-      html_document:
-        keep_md: true
+output: rmarkdown::github_document
 ---
 
 ```{r setup, include=FALSE}
