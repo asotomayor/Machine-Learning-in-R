@@ -1,8 +1,10 @@
 ---
 title: "M3-Tarea 1"
-author: "Antonio Sotomayor"
+author: "Antonio Sotomayor Sola"
 date: "25 de noviembre de 2017"
-output: rmarkdown::github_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
