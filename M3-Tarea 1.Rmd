@@ -1,0 +1,289 @@
+---
+title: "M3-Tarea 1"
+author: "Antonio Sotomayor"
+date: "25 de noviembre de 2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## INTRODUCCIÓN
+
+El objetivo de esta tarea es clasificar a los alumnos de matemáticas como aprobados o suspensos en función del resto de atributos considerando que el alumno estará suspenso si la nota final es menor que 10.
+
+La predicción se realizará utilizando dos modelos de aprendizaje supervisado utilizando el paquete caret:
+
+ - k-Nearest Neighbor (kNN)
+ - Support Vector Machine (SVM)
+
+Además se realizará una clasificación de los distintos grupos de alumnos según sus atributos y se analizará el perfil del grupo mayoritario de alumnos mediante el método K-means.
+
+## 1. Carga de datos y Análisis Descriptivo
+
+Creamos y establecemos nuevo diretorio de trabajo 
+```{r eval=TRUE,echo=TRUE,warning=FALSE, message=FALSE}
+if(!file.exists("C:/Users/Antonio/Documents/M3-Machine-Learning/M3-scripts//"))
+{dir.create("C:/Users/Antonio/Documents/M3-Machine-Learning/M3-scripts")}
+setwd("C:/Users/Antonio/Documents/M3-Machine-Learning/M3-scripts")
+```
+Creamos directorio para los datos
+```{r}
+if(!file.exists("../M3-data")){dir.create("../M3-data")}
+```
+Carga, lectura de datos y fecha
+```{r}
+fileURL <- "https://archive.ics.uci.edu/ml/machine-learning-databases/00320/student.zip"
+download.file(fileURL,destfile="../M3-data/student.zip")
+unzip("../M3-data/student.zip", exdir="../M3-data")
+list.files("../M3-data")
+fechaDescarga <- date()
+studentMat <- read.table("../M3-data/student-mat.csv", 
+                         row.names=NULL, sep=";", header=TRUE)
+```
+Comprobamos el data frame studentMat:    
+```{r}
+str(studentMat)
+```
+Tenemos 33 atributos de los cuales 16 son numéricos y 17 de tipo factor.
+
+Comprobamos la existencia de NA:
+```{r}
+sapply(studentMat, function(x) sum(is.na(x)))
+```
+No tenemos valores NA  
+
+Cargamos librerias necesarias:  
+```{r eval=TRUE,echo=TRUE,warning=FALSE, message=FALSE}
+load.libraries <- c('data.table', 'knitr','testthat', 'gridExtra', 'corrplot', 'GGally', 'ggplot2', 'e1071', 'dplyr','mlbench', 'caret', 'ROCR', 'miscset', 'plotrix', 'cluster')
+install.lib <- load.libraries[!load.libraries %in% installed.packages()]
+for(libs in install.lib) install.packages(libs, dependences = TRUE)
+sapply(load.libraries, require, character = TRUE)
+```
+
+## 2. Análisis Exploratorio
+
+**Analizamos la dsitribucion de las variables de tipo factor:**  
+```{r,fig.align='center',out.extra='angle=90'}
+par(mfrow=c(3, 3)) ##Boxplots
+plot(studentMat$school, studentMat$G3, main="G3-school")
+plot(studentMat$sex, studentMat$G3, main="G3-sex")
+plot(studentMat$address, studentMat$G3, main="G3-address")
+plot(studentMat$famsize, studentMat$G3, main="G3-famsize")
+plot(studentMat$Pstatus, studentMat$G3, main="G3-Pstatus")
+plot(studentMat$Mjob, studentMat$G3, main="G3-Mjob")
+plot(studentMat$Fjob, studentMat$G3, main="G3-Fjob")
+plot(studentMat$reason, studentMat$G3, main="G3-reason")
+plot(studentMat$guardian, studentMat$G3, main="G3-guardian")
+par(mfrow=c(2, 4))
+plot(studentMat$schoolsup, studentMat$G3, main="G3-schoolsup")
+plot(studentMat$famsup, studentMat$G3, main="G3-famsup")
+plot(studentMat$paid, studentMat$G3, main="G3-paid")
+plot(studentMat$activities, studentMat$G3, main="G3-activities")
+plot(studentMat$nursery, studentMat$G3, main="G3-nursery")
+plot(studentMat$higher, studentMat$G3, main="G3-higher")
+plot(studentMat$internet, studentMat$G3, main="G3-internet")
+plot(studentMat$romantic, studentMat$G3, main="G3-romantic")
+```
+
+Observamos que de todas las variables de tipo factor solos las variables Mjob, Fjob, higher e internet paracen influir en la nota final G3 por lo que el resto parecen no ser buenas variables predictoras.  
+
+Creamos un data frame sin los atributos anteriores:
+```{r}
+studentMat2 <- studentMat %>% select(-school, -sex, -address, -famsize, -Pstatus,
+                                     -reason, - guardian, -schoolsup, -famsup, -paid, 
+                                     -activities, -nursery, -romantic)
+```
+
+**Análisis de las variables numéricas:**  
+Creamos una variable dummy pass que sera 1 si G3>9 y 0 en caso contrario  
+```{r}
+studentMat2$pass <- ifelse(studentMat2$G3>9, 1,0)  
+```
+Convertimos las varible higher de tipo factor a numérica: 
+```{r}
+studentMat2$Mjob <- as.numeric(studentMat2$Mjob)
+studentMat2$Fjob <- as.numeric(studentMat2$Fjob)
+studentMat2$higher <- as.numeric(studentMat2$higher)
+studentMat2$internet <- as.numeric(studentMat2$internet) 
+```
+Creamos la matriz de correlación para los estudiantes de matemáticas:  
+```{r, fig.align='center',out.extra='angle=90'}
+plot.new()
+library(corrplot)
+matCorMat <- cor(studentMat2)
+matCorMat[is.na(matCorMat)] <- 0
+col <- colorRampPalette(c('#BB4444', '#EE9988', '#FFFFFF', '#77AADD', '#4477AA'))
+corrplot(matCorMat, type = "lower", tl.srt = 15, tl.col = 'black')
+```
+
+Observamos una alta correlación entre las notas del primer y segundo semestre (G1 y G2) con la nota final del curso (G3). También se observa una cierta alta correlación entre salir y beber alcohol los fines de semana y entre los niveles de educación del padre y la madre lo cual tiene sentido.
+
+## 3. Análisis exploratorio apoyado de un método no supervisado: Clustering. K-Means
+
+Aplicación del método sobre el data drame studentMat2:
+
+**Calculamos el número óptimo de clusters según Elbow:**
+```{r, fig.align='center',out.extra='angle=90'}
+mydata <- studentMat2 
+wss <- (nrow(mydata)-1)*sum(apply(mydata,2,var)) 
+for (i in 2:15) wss[i] <- sum(kmeans(mydata, centers=i)$withinss)
+plot(1:15, wss, type="b", xlab="Numero de Clusters", 
+     ylab="Sumas de cuadrados dentro de los grupos", 
+     main="Num de clusters óptimo según Elbow", pch=20, cex=2)
+```
+
+A partir de k=5 la variación de la suma de los cuadrados de dentro de los grupos es muy pequeña por lo que aplicaemos K-means para 5 clusters:
+```{r}
+set.seed(1234) 
+kmeansMat.clust <- kmeans(studentMat2, 5) 
+kmeansMat.clust
+kmeansMat.clust$size
+```
+**Representación del cluster mayoritario (cluster 3):**
+
+```{r, fig.align='center',out.extra='angle=90'}
+radial.plot(kmeansMat.clust$centers[3,], labels = names(kmeansMat.clust$centers[3,]), rp.type = "s", point.symbol = 15, point.col = "blue", mar = c(1,0.5,1,3), radial.lim = c(0,20))
+```
+
+**Análisis del cluster mayoritario (cluster 3), perfil del alumno:**
+```{r}
+studentMat_final<- studentMat %>% mutate(cluster_id = kmeansMat.clust$cluster)
+studentMat_cluster3 <- subset(studentMat_final, studentMat_final$cluster_id == "3")
+kable(head(studentMat_cluster3[,c(1:6,13:14,20:21,30,30:34)]))
+summary(studentMat_cluster3)
+```
+
+Perfil del alumno en el cluster 3: la edad media es 17 años, pertenecen a familias numerosas que mantienen una buena relación familiar, con padres conviviendo juntos en la que la madre suele estar al cargo de ellos en casa. El nivel de educación de los padres es similar y sin estudios superiores. La gran mayoria van al colegio Gabriel Pereira y la razón principal fue "course". Residen en un entorno urbano cerca del colegio, afirman estudiar entre 2 y 5 horas semanales, no reciben apoyo educativo extra en el colegio pero si por parte familiar. Hay un igual numero de alumnos que paga por clases particulares como los que no pagan. La moyoria asistió a guarderia, tienen internet en casa, estan solteros y quieren cursar estudios superiores. Disponen de bastante tiempo libre despúes del colegio, salen bastante con los amigos, no suelen beber alcohol entre semana pero si algo los fin de semana, suelen faltar poco a clase, gozan de buena salud y suelen ir mejorando levemente las notas en cada semestre obteniendo una calificacion de aprobado por la mínima..
+
+##4. Modelos Supervisados: Modelos KNN y SVM  
+Se realizará la predicción de la calificacion final del alumno (aprobado o suspenso) en función de todos los atributos contenidos en el data frame studentMat2. 
+
+Convertimos la variable pass a tipo factor "pass" si "G3>9 y "fail" en caso contrario
+```{r}
+studentMat2$pass <- ifelse(studentMat$G3>9, "pass", "fail")
+studentMat2$pass <- as.factor(studentMat2$pass)
+prop.table(table(studentMat2$pass))
+str(studentMat2)
+```
+Creamos los dataset de entrenamiento y test:
+```{r}
+index.studentMat2 <- createDataPartition(studentMat2$pass, p=0.8, list=F)
+train.studentMat2 <- studentMat2[index.studentMat2,] 
+test.studentMat2 <- studentMat2[ -index.studentMat2, ]
+```
+Comprobamos que las proporciones de aprobados y suspensos se  mantienen en los nuevos datasets:
+```{r}
+prop.table( table(train.studentMat2$pass))
+prop.table( table(test.studentMat2$pass))
+```
+**Preprocesado de datos**  
+Busqueda de variables con varianza casi nula que no aportan nada al calsificador:
+```{r}
+zero.var.train.studentMat2 <- nearZeroVar( train.studentMat2[,-dim(train.studentMat2)[2]], saveMetrics=F )
+colnames(train.studentMat2)[zero.var.train.studentMat2]
+```
+No tenemos variables con varianza casi nula.
+
+Busqueda de variables fuertemente correladas:
+```{r}
+cor.train.studentMat2.matrix <- cor( train.studentMat2[, -dim(train.studentMat2)[2]] )
+cor.train.studentMat2.index <- findCorrelation( cor.train.studentMat2.matrix, 0.75 ) 
+cor.train.studentMat2.index
+cor.train.studentMat2 <- train.studentMat2[,-cor.train.studentMat2.index] 
+dim(cor.train.studentMat2)
+cor.test.studentMat2 <- test.studentMat2[,-cor.train.studentMat2.index] 
+dim(cor.test.studentMat2)
+```
+Se ha reducido en número de variables predictoras en 2 (de 21 a 19) quitando las que estan correladas.
+
+Centramos y escalamos las variables para reducir la desviación:
+```{r}
+xTrans.studentMat2 <- preProcess(cor.train.studentMat2[, -dim(cor.train.studentMat2)[2]]) 
+train.studentMat2.prep <- predict( xTrans.studentMat2, cor.train.studentMat2[,-dim(cor.train.studentMat2)[2]]) 
+train.studentMat2.prep$pass <- cor.train.studentMat2$pass
+test.studentMat2.prep <- predict( xTrans.studentMat2, cor.test.studentMat2[,-dim(cor.test.studentMat2)[2]]) 
+test.studentMat2.prep$pass <- cor.test.studentMat2$pass
+```
+###4.1 Generación de modelos
+
+###4.1.1 Modelo KNN
+**Entrenamos el modelo**
+```{r, fig.align='center',out.extra='angle=90'}
+knn.control <- trainControl(method="repeatedcv", repeats=5)
+knn.studentMat2.model <- train(x=train.studentMat2.prep[,-dim(train.studentMat2.prep)[2]], y=train.studentMat2.prep$pass, method="knn", tuneLength=10, trControl=knn.control)
+knn.studentMat2.model
+plot1 <- plot(knn.studentMat2.model, metric="Accuracy") 
+print(plot1)
+```
+
+**Predicción KNN sobre el conjunto de test**
+```{r}
+knn.studentMat2.test <- predict(knn.studentMat2.model, newdata= test.studentMat2.prep[,-dim(train.studentMat2.prep)[2]]) 
+knn.studentMat2.test
+```
+**Extracción de prediciones**
+```{r}
+knn.studentMat2.test.preds <- extractPrediction( list(model1=knn.studentMat2.model), testX=test.studentMat2.prep[,-dim(train.studentMat2.prep)[2]] , testY=test.studentMat2.prep$pass)
+conjunto.test.preds <- subset(knn.studentMat2.test.preds, dataType== "Test") 
+head(conjunto.test.preds)
+```
+**Extraccion de probabilidades**
+```{r, fig.align='center',out.extra='angle=90'}
+knn.studentMat2.test.probs <- extractProb( list(model1=knn.studentMat2.model), testX= test.studentMat2.prep[,-dim(train.studentMat2.prep)[2]], testY=test.studentMat2.prep$pass) 
+conjunto.test.probs <- subset(knn.studentMat2.test.probs, dataType== "Test") 
+plotClassProbs(conjunto.test.probs )
+``` 
+
+**Evaluación del modelo, matriz de confusión y curvas ROC**
+```{r, fig.align='center',out.extra='angle=90'}
+confusionMatrix(knn.studentMat2.test, test.studentMat2.prep$pass)
+pr <- prediction(ifelse(knn.studentMat2.test == 'pass',1,0), ifelse(test.studentMat2.prep$pass == 'pass',1,0)) 
+prf <- performance(pr, measure = "tpr", x.measure = "fpr") 
+plot(prf)
+```
+
+###4.1.2 Modelo SVM
+**Entrenamos el modelo**
+```{r, fig.align='center',out.extra='angle=90'}
+svm.control <- trainControl(method="repeatedcv", repeats=5) 
+svm.studentMat2.model <- train(x=train.studentMat2.prep[,-dim(train.studentMat2.prep)[2]], y=train.studentMat2.prep$pass, method="svmRadial", tuneLength=10, trControl=svm.control)
+svm.studentMat2.model
+plot1 <- plot(svm.studentMat2.model, metric="Accuracy") 
+print(plot1)
+```
+
+**Predicción SVM sobre el conjunto de test**
+```{r}
+svm.studentMat2.test <- predict(svm.studentMat2.model, newdata= test.studentMat2.prep[,-dim(train.studentMat2.prep)[2]]) 
+svm.studentMat2.test
+```
+**Evaluación del modelo, matriz de confusión y curvas ROC**
+```{r, fig.align='center',out.extra='angle=90'}
+confusionMatrix(svm.studentMat2.test, test.studentMat2.prep$pass)
+pr <- prediction(ifelse(svm.studentMat2.test == 'pass',1,0), ifelse(test.studentMat2.prep$pass == 'pass',1,0))
+prf <- performance(pr, measure = "tpr", x.measure = "fpr") 
+plot(prf)
+```
+
+Obtenemos una gráfica que representa un clasificador aleatorio con la misma proporción de aciertos que de fallos. Esto puede ser debido a una mala selección de las variables predictoras para el modelo.
+
+###Comparación de Modelos: KNN vs SVM
+**Model1=knn, Model2=SVM**
+```{r, fig.align='center',out.extra='angle=90'}
+models <- list( knn.studentMat2.model, svm.studentMat2.model ) 
+compar.models <- resamples( models ) 
+summary( compar.models )
+dotplot( compar.models)
+```
+
+En este caso el Modelo 1= KNN tiene mayor precisión en la predicción.
+
+
+
+
+
+
+
