@@ -1,6 +1,8 @@
 ---
 title: "M3-Tarea 1"
-author: "Antonio Sotomayor" 
+
+author: "Antonio Sotomayor Sola" 
+
 date: "25 de noviembre de 2017"
 output:
   html_document: default
