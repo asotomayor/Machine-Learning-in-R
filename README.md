@@ -1,3 +1,4 @@
 # Machine-Learning-in-R
-Machine learning in R
-Click <a href="M3-Tarea_1.html">here</a> to go to cars.
+
+Acitividad correspondiente al módulo 3 del Máster de Telefónica en Big Data y Business Analytics.
+
