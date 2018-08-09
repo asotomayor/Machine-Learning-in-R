@@ -8,4 +8,5 @@ La predicción se realizará utilizando dos modelos de aprendizaje supervisado u
 
 - k-Nearest Neighbor (kNN)
 - Support Vector Machine (SVM)
+
 Además se realizará una clasificación de los distintos grupos de alumnos según sus atributos y se analizará el perfil del grupo mayoritario de alumnos mediante el método K-means.
